@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div style="padding:2em; max-width:60em">
+<img src="{% static 'img/atlas.png' %}" style="max-width:100%">
+<h3>Generative Agents: replays</h3>
+{% if replays %}
+<table class="table">
+  <tr><th>Simulation</th><th>Steps</th><th>Ends at (game time)</th><th>Watch</th></tr>
+  {% for r in replays %}
+  <tr>
+    <td>{{ r.sim_code }}</td>
+    <td>{{ r.steps }}</td>
+    <td>{{ r.curr_time }}</td>
+    <td>
+      <a href="{% url 'demo' r.sim_code 0 3 %}">from the start</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<p>Speed in the address <code>/demo/&lt;sim&gt;/&lt;step&gt;/&lt;speed&gt;/</code>: 1 (slowest) to 6 (fastest).
+Start step = game hours &times; 360 (for example 14:00 on Feb 13 is step 5040).</p>
+{% else %}
+<p>No replays yet. Create one with <code>python main.py export-replay --sim &lt;name&gt;</code>.</p>
+{% endif %}
+</div>
+{% endblock content %}

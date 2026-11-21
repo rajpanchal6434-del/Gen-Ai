@@ -1,0 +1,45 @@
+This project contains a modified copy of the backend of "Generative Agents"
+by Joon Sung Park et al. (https://github.com/joonspk-research/generative_agents),
+licensed under the Apache License 2.0 (see reverie/LICENSE-original-Apache-2.0).
+
+Paper: Joon Sung Park, Joseph C. O'Brien, Carrie J. Cai, Meredith Ringel Morris,
+Percy Liang, Michael S. Bernstein. "Generative Agents: Interactive Simulacra of
+Human Behavior." UIST '23. https://arxiv.org/abs/2304.03442
+
+Files under reverie/ are the authors' code. Changes made in this project:
+
+  reverie/persona/prompt_template/gpt_structure.py
+      Rewritten to call the current OpenAI SDK through reverie/llm_gateway.py
+      (retired models replaced by one configurable chat model; completion
+      prompts sent unchanged with a "continue the text" instruction; same
+      temperature / max_tokens / stop; errors retried or stopped instead of
+      returning "ChatGPT ERROR"). Function names and retry loops kept.
+  reverie/llm_gateway.py        New: cache, cost tracking, budget, mock mode.
+  reverie/utils.py              New: paths (the authors' file is not published).
+  reverie/reverie.py            Headless: no Selenium / Phaser frontend; the
+                                next environment file is written by the backend
+                                exactly as the frontend did; resume in place;
+                                movements logged to movement/movements.jsonl.
+  reverie/persona/memory_structures/scratch.py
+                                save() accepts an empty clock / no action yet.
+  all reverie/*.py              bare `except:` changed to `except Exception:`
+                                so stop signals are not swallowed.
+  reverie/test.py               removed (needed a hard-coded API key).
+
+Files under frontend/ are the authors' environment/frontend_server (replay
+viewer). Changes:
+
+  frontend/frontend_server/settings/   Django 2.2 -> 6: no database, admin,
+                                S3 storage or CORS; secret key generated at
+                                start; art assets served from external/.
+  frontend/frontend_server/urls.py     url() -> re_path(); only the replay routes.
+  frontend/translator/views.py         demo and replay_persona_state kept
+                                (logic unchanged, paths from settings); live
+                                simulation views removed; landing lists replays.
+  frontend/templates/                  {% load staticfiles %} -> {% load static %};
+                                jQuery pinned and loaded before Bootstrap;
+                                third-party visitor tracker removed; optional
+                                ?renderer=canvas; landing page lists replays;
+                                live-mode templates (home, path_tester) removed.
+  The art assets (tilesets, character sprites) are not copied into this repo;
+  `python main.py setup --viewer` downloads them from the authors' repository.
