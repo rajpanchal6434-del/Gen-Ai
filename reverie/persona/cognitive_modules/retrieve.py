@@ -13,6 +13,8 @@ from persona.prompt_template.gpt_structure import *
 from numpy import dot
 from numpy.linalg import norm
 
+import memory_fix
+
 def retrieve(persona, perceived): 
   """
   This function takes the events that are perceived by the persona as input
@@ -142,6 +144,9 @@ def extract_recency(persona, nodes):
     recency_out: A dictionary whose keys are the node.node_id and whose values
                  are the float that represents the recency score. 
   """
+  if memory_fix.enabled("A"):
+    return extract_recency_hours(persona, nodes)
+
   recency_vals = [persona.scratch.recency_decay ** i 
                   for i in range(1, len(nodes) + 1)]
   
@@ -149,6 +154,25 @@ def extract_recency(persona, nodes):
   for count, node in enumerate(nodes): 
     recency_out[node.node_id] = recency_vals[count]
 
+  return recency_out
+
+
+def extract_recency_hours(persona, nodes):
+  """
+  Memory fix A (ours, not the authors' code): recency as the paper defines it,
+  decay ** (game hours since the memory was last retrieved). The original
+  above uses decay ** (place in a list sorted oldest-first), which ignores
+  time and gives the most recently used memory the lowest score.
+  """
+  if not nodes:
+    return dict()
+  now = persona.scratch.curr_time
+  if now is None:  # e.g. while the starting memories are loaded
+    now = max(node.last_accessed for node in nodes)
+  recency_out = dict()
+  for node in nodes:
+    hours = max(0.0, (now - node.last_accessed).total_seconds() / 3600)
+    recency_out[node.node_id] = persona.scratch.recency_decay ** hours
   return recency_out
 
 

@@ -71,6 +71,7 @@ def configure_env(args):
     os.environ["GA_EMBED_MODEL"] = args.embed_model
   if getattr(args, "budget", None) is not None:
     os.environ["GA_BUDGET_USD"] = str(args.budget)
+  set_memory_fix(getattr(args, "memory_fix", ""))
   os.makedirs(runs, exist_ok=True)
   # The authors' modules use cwd-relative paths and flat imports.
   os.chdir(BACKEND)
@@ -82,6 +83,15 @@ def configure_env(args):
       sys.exit("Authors' data missing: run `python main.py setup` first.")
     shutil.copytree(src, base_dst)
   return runs
+
+
+def set_memory_fix(value):
+  """Our memory fixes (see reverie/memory_fix.py); '' = the authors' code."""
+  sys.path.insert(0, BACKEND)
+  import memory_fix
+  fixes = sorted(memory_fix.parse(value))
+  os.environ["GA_MEMORY_FIX"] = ",".join(fixes)
+  return ",".join(fixes)
 
 
 def load_server(sim):
@@ -120,12 +130,17 @@ def cmd_run(args):
       cfg = {"created": datetime.datetime.now().isoformat(timespec="seconds"),
              "chat_model": gw.chat_model, "embed_model": gw.embed_model,
              "mock": gw.mock, "ablation": args.ablation,
+             "memory_fix": os.environ["GA_MEMORY_FIX"],
              "reflection_threshold": args.reflect_threshold}
       write_extra(folder, cfg)
     else:
       if cfg.get("ablation") != args.ablation:
         log(f"Note: this simulation was created with ablation={cfg.get('ablation')}; keeping it.")
       args.ablation = cfg.get("ablation")
+      saved_fix = cfg.get("memory_fix", "")
+      if saved_fix != os.environ["GA_MEMORY_FIX"]:
+        log(f"Note: this simulation was created with memory fix '{saved_fix or 'none'}'; keeping it.")
+        set_memory_fix(saved_fix)
       # Drop movement lines written after the last save (they will be replayed).
       mv = os.path.join(folder, "movement", "movements.jsonl")
       if os.path.exists(mv):
@@ -192,7 +207,8 @@ def cmd_run(args):
     rs.on_step = on_step
     log(f"Running {args.sim}: steps {rs.step} -> {target} "
         f"({total / STEPS_PER_HOUR:.2f} game hours), model={gw.chat_model}, "
-        f"mock={gw.mock}, budget=${gw.budget:.2f}")
+        f"mock={gw.mock}, budget=${gw.budget:.2f}, "
+        f"memory fix={os.environ['GA_MEMORY_FIX'] or 'none'}")
     try:
       rs.start_server(total)
       save_now(rs)
@@ -314,9 +330,12 @@ def cmd_evaluate(args):
   sim = args.sim + ("__step0" if args.start else "")
   if not os.path.exists(os.path.join(runs, sim)):
     sys.exit(f"No simulation {sim} in {runs}")
-  out_dir = os.path.join(ROOT, "results", sim)
-  os.environ["GA_CALL_LOG"] = os.path.join(runs, f"{sim}.eval_calls.jsonl")
-  with contextlib.redirect_stdout(open(os.path.join(runs, f"{sim}.eval.log"), "a",
+  # Same saved run, different memory fix -> separate results (Test 1).
+  tag = sim + (f"__fix-{os.environ['GA_MEMORY_FIX'].replace(',', '')}"
+               if os.environ["GA_MEMORY_FIX"] else "")
+  out_dir = os.path.join(ROOT, "results", tag)
+  os.environ["GA_CALL_LOG"] = os.path.join(runs, f"{tag}.eval_calls.jsonl")
+  with contextlib.redirect_stdout(open(os.path.join(runs, f"{tag}.eval.log"), "a",
                                        encoding="utf-8")):
     from llm_gateway import gateway, FatalLLMError
     import evaluation
@@ -349,6 +368,8 @@ def main():
     p.add_argument("--model", help="chat model (default gpt-4o-mini or $GA_CHAT_MODEL)")
     p.add_argument("--embed-model", help="embedding model (default text-embedding-3-small)")
     p.add_argument("--budget", type=float, default=25.0, help="stop when total spend passes this (USD)")
+    p.add_argument("--memory-fix", default="",
+                   help="our memory fixes to switch on, e.g. A (default: none = authors' code)")
 
   r = sub.add_parser("run")
   common(r)
