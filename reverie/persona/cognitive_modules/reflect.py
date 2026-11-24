@@ -17,6 +17,7 @@ from global_methods import *
 from persona.prompt_template.run_gpt_prompt import *
 from persona.prompt_template.gpt_structure import *
 from persona.cognitive_modules.retrieve import *
+import memory_fix
 
 def generate_focal_points(persona, n=3): 
   if debug: print ("GNS FUNCTION: <generate_focal_points>")
@@ -242,6 +243,10 @@ def reflect(persona):
       persona.a_mem.add_thought(created, expiration, s, p, o, 
                                 memo_thought, keywords, thought_poignancy, 
                                 thought_embedding_pair, evidence)
+
+      # Memory fix D (ours): also save each fact of the conversation.
+      if memory_fix.enabled("D"):
+        memory_fix.add_convo_facts(persona, all_utt, evidence[0], created)
 
 
 

@@ -59,6 +59,10 @@ def GPT4_safe_generate_response(prompt,
       end_index = curr_gpt_response.rfind('}') + 1
       curr_gpt_response = curr_gpt_response[:end_index]
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
+      # Current models often answer {"output": 6} instead of {"output": "6"};
+      # the authors' validators expect text, so give them text.
+      if isinstance(curr_gpt_response, (int, float)) and not isinstance(curr_gpt_response, bool):
+        curr_gpt_response = str(curr_gpt_response)
       if func_validate(curr_gpt_response, prompt=prompt):
         return func_clean_up(curr_gpt_response, prompt=prompt)
     except Exception:
@@ -87,6 +91,10 @@ def ChatGPT_safe_generate_response(prompt,
       end_index = curr_gpt_response.rfind('}') + 1
       curr_gpt_response = curr_gpt_response[:end_index]
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
+      # Current models often answer {"output": 6} instead of {"output": "6"};
+      # the authors' validators expect text, so give them text.
+      if isinstance(curr_gpt_response, (int, float)) and not isinstance(curr_gpt_response, bool):
+        curr_gpt_response = str(curr_gpt_response)
       if func_validate(curr_gpt_response, prompt=prompt):
         return func_clean_up(curr_gpt_response, prompt=prompt)
     except Exception:

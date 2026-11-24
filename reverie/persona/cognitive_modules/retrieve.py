@@ -272,6 +272,12 @@ def new_retrieve(persona, focal_points, n_count=30):
                      + persona.scratch.relevance_w*relevance_out[key]*gw[1] 
                      + persona.scratch.importance_w*importance_out[key]*gw[2])
 
+    # Memory fix B (ours): exact names / dates / times from the question.
+    if memory_fix.enabled("B"):
+      keyword_out = memory_fix.keyword_scores(nodes, focal_pt)
+      for key in master_out:
+        master_out[key] += memory_fix.KEYWORD_WEIGHT * keyword_out[key]
+
     master_out = top_highest_x_values(master_out, len(master_out.keys()))
     for key, val in master_out.items(): 
       print (persona.a_mem.id_to_node[key].embedding_key, val)

@@ -14,6 +14,10 @@ Files under reverie/ are the authors' code. Changes made in this project:
       prompts sent unchanged with a "continue the text" instruction; same
       temperature / max_tokens / stop; errors retried or stopped instead of
       returning "ChatGPT ERROR"). Function names and retry loops kept.
+      A JSON answer that is a bare number ({"output": 6}) is turned into text
+      ("6") before the authors' validators see it: they expect text, and
+      without this e.g. run_gpt_prompt_event_poignancy returned None and the
+      run crashed while loading the starting memories.
   reverie/llm_gateway.py        New: cache, cost tracking, budget, mock mode.
   reverie/utils.py              New: paths (the authors' file is not published).
   reverie/reverie.py            Headless: no Selenium / Phaser frontend; the
@@ -25,9 +29,9 @@ Files under reverie/ are the authors' code. Changes made in this project:
   all reverie/*.py              bare `except:` changed to `except Exception:`
                                 so stop signals are not swallowed.
   reverie/test.py               removed (needed a hard-coded API key).
-  reverie/memory_fix.py         New: switches for our memory fixes (master's
+  reverie/memory_fix.py         New: our memory fixes A-D (master's
                                 contribution), all OFF by default; set with
-                                `main.py ... --memory-fix A`.
+                                `main.py ... --memory-fix A,B,C,D`.
   reverie/persona/cognitive_modules/retrieve.py
                                 Fix A (only with --memory-fix A): recency =
                                 decay ** game hours since last retrieved, as in
@@ -35,6 +39,17 @@ Files under reverie/ are the authors' code. Changes made in this project:
                                 (place in a list sorted oldest-first) is kept
                                 as the default; it ignores time and gives the
                                 most recently used memory the lowest score.
+                                Fix B (only with B): a keyword score (names,
+                                dates, times in the question matched word for
+                                word) is added to the retrieval score.
+  reverie/persona/cognitive_modules/converse.py
+                                Fix C (only with C): each conversation line is
+                                fact-checked against the memories it was based
+                                on before it is spoken.
+  reverie/persona/cognitive_modules/reflect.py
+                                Fix D (only with D): after a conversation, each
+                                fact in it is saved as its own memory, linked
+                                to the conversation.
 
 Files under frontend/ are the authors' environment/frontend_server (replay
 viewer). Changes:

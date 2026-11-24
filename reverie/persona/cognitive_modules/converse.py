@@ -16,6 +16,7 @@ from persona.memory_structures.spatial_memory import *
 from persona.memory_structures.associative_memory import *
 from persona.memory_structures.scratch import *
 from persona.cognitive_modules.retrieve import *
+import memory_fix
 from persona.prompt_template.run_gpt_prompt import *
 
 def generate_agent_chat_summarize_ideas(init_persona, 
@@ -116,6 +117,12 @@ def generate_one_utterance(maze, init_persona, target_persona, retrieved, curr_c
 
   print ("July 23 5")
   x = run_gpt_generate_iterative_chat_utt(maze, init_persona, target_persona, retrieved, curr_context, curr_chat)[0]
+
+  # Memory fix C (ours): drop claims no memory supports before speaking.
+  if memory_fix.enabled("C"):
+    nodes = [n for v in retrieved.values() for n in v]
+    said = "".join(f"{row[0]}: {row[1]}\n" for row in curr_chat[-4:])
+    x["utterance"] = memory_fix.fact_check(init_persona, x["utterance"], nodes, said)
 
   print ("July 23 6")
 

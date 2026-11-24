@@ -254,10 +254,15 @@ def interview(persona, question):
   from persona.cognitive_modules.retrieve import new_retrieve
   from persona.cognitive_modules.converse import (generate_summarize_ideas,
                                                   generate_next_line)
+  import memory_fix
   retrieved = new_retrieve(persona, [question], 50)[question]
   summarized_idea = generate_summarize_ideas(persona, retrieved, question)
   convo = [["Interviewer", question]]
-  return generate_next_line(persona, "Interviewer", convo, summarized_idea)
+  answer = generate_next_line(persona, "Interviewer", convo, summarized_idea)
+  if memory_fix.enabled("C"):  # same fact-check as in agent conversations
+    answer = memory_fix.fact_check(persona, answer, retrieved,
+                                   f"Interviewer: {question}")
+  return answer
 
 
 def cmd_interview(args):
@@ -265,6 +270,9 @@ def cmd_interview(args):
   with contextlib.redirect_stdout(open(os.devnull, "w")):
     from llm_gateway import gateway
     rs = load_server(args.sim)
+    import memory_fix
+    if memory_fix.enabled("D"):
+      memory_fix.backfill_convo_facts(rs.personas[args.persona])
     answer = interview(rs.personas[args.persona], args.question)
   log(f"{args.persona}: {answer}")
   log(gateway().summary())
@@ -342,6 +350,10 @@ def cmd_evaluate(args):
     rs = load_server(sim)
     for p in rs.personas.values():  # interviews happen "now" in game time
       p.scratch.curr_time = rs.curr_time
+    import memory_fix
+    if memory_fix.enabled("D"):  # Test 1 on a run made without fix D
+      added = sum(memory_fix.backfill_convo_facts(p) for p in rs.personas.values())
+      log(f"Memory fix D: added {added} conversation facts (in memory only).")
     try:
       summary, table = evaluation.evaluate(rs.personas, os.path.join(runs, sim),
                                            interview, out_dir,
