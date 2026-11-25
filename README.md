@@ -74,6 +74,43 @@ tilesets: add `?renderer=canvas` to the address.
   `runs/<sim>.costs.json` (calls and cost per prompt template),
   `runs/<sim>/movement/movements.jsonl` (every agent, every step).
 
+## Memory fixes (our contribution)
+
+The paper's authors report that agents "failed to retrieve relevant memories"
+and "fabricated embellishments" (Sec. 1). Reading their code shows four causes;
+each has a fix in `reverie/memory_fix.py`, switched on with `--memory-fix`.
+All are off by default, so a run without the switch is the authors' code.
+
+| Fix | Problem in the authors' code | What the fix does |
+| --- | --- | --- |
+| A | Recency is `0.995 ^ place in a list sorted oldest-first`: it ignores the clock and gives the newest memory the lowest score | Recency is `0.995 ^ game hours since last used`, as the paper says (Sec. 4.1) |
+| B | Relevance is meaning only, so exact names, dates and times are missed | Adds a keyword score: names, dates and times in the question matched word for word |
+| C | Nothing checks what an agent says against its memories | Each line (in conversations and interviews) is fact-checked; unsupported claims are removed |
+| D | A whole conversation is saved as one short summary; its details are never searched | Each fact in a conversation is saved as its own memory, linked to the conversation |
+
+```powershell
+# Recall test: does retrieval bring up the memories that hold the answer? (only question embeddings, near $0)
+.venv\Scripts\python.exe main.py evaluate --sim before --recall-only
+.venv\Scripts\python.exe main.py evaluate --sim before --recall-only --memory-fix A,D,B
+# Test 1: same saved run, recalled with and without the fixes (cheap, no new simulation)
+.venv\Scripts\python.exe main.py evaluate --sim before                      # -> results\before
+.venv\Scripts\python.exe main.py evaluate --sim before --memory-fix A,B,C,D # -> results\before__fix-ABCD
+# Test 2: full simulations, before vs. after
+.venv\Scripts\python.exe main.py run --sim before
+.venv\Scripts\python.exe main.py run --sim after --memory-fix A,B,C,D
+```
+
+On a run made without fix D, `evaluate --memory-fix ...D` first turns its saved
+conversations into fact memories (in memory only, nothing is written). The
+evaluation's "really knew" check reads the agent's full conversations and
+ignores fix-D memories, so it gives the same answer with and without the fixes.
+
+The recall test asks each agent who really knows a fact (the Valentine's
+party, the mayor election, the party time) a question about it, retrieves the
+top 50 memories as an agent would, and checks whether a memory holding the
+fact is among them and at which rank. Starting background text is left out,
+because retrieval cannot return it. Results go to `recall.json` / `recall.md`.
+
 ## Layout
 
 ```text
@@ -85,6 +122,7 @@ reverie/           the authors' backend (modified, see NOTICE)
   maze.py            Smallville map, tiles, events
   path_finder.py     walking on the map
   llm_gateway.py     NEW: model calls, cache, cost, budget, mock
+  memory_fix.py      NEW: our memory fixes A-D (off by default, --memory-fix)
   persona/
     persona.py         one agent: perceive -> retrieve -> plan -> reflect -> execute
     cognitive_modules/ perceive, retrieve, plan, reflect, execute, converse

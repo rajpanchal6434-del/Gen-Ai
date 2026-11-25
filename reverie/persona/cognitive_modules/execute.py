@@ -12,6 +12,27 @@ from global_methods import *
 from path_finder import *
 from utils import *
 
+
+def _known_tiles(maze, persona, address):
+  """Tiles for an action address, falling back to the closest known part.
+
+  Added for this re-implementation (see NOTICE). The model sometimes picks a
+  sector but no arena, e.g. "the Ville:artist's co-living space:", which is
+  not a map address and crashed the run with a KeyError. Drop empty and
+  unknown trailing parts until a known address remains; if none is known,
+  stay on the current tile."""
+  parts = [p for p in address.split(":") if p.strip()]
+  while parts:
+    key = ":".join(parts)
+    if key in maze.address_tiles:
+      if key != address:
+        print(f"Unknown address {address!r}; using {key!r}")
+      return maze.address_tiles[key]
+    parts = parts[:-1]
+  print(f"Unknown address {address!r}; staying in place")
+  return {tuple(persona.scratch.curr_tile)}
+
+
 def execute(persona, maze, personas, plan): 
   """
   Given a plan (action's string address), we execute the plan (actually 
@@ -79,7 +100,7 @@ def execute(persona, maze, personas, plan):
     elif "<random>" in plan: 
       # Executing a random location action.
       plan = ":".join(plan.split(":")[:-1])
-      target_tiles = maze.address_tiles[plan]
+      target_tiles = _known_tiles(maze, persona, plan)
       target_tiles = random.sample(list(target_tiles), 1)
 
     else: 
@@ -88,10 +109,9 @@ def execute(persona, maze, personas, plan):
       # Retrieve the target addresses. Again, plan is an action address in its
       # string form. <maze.address_tiles> takes this and returns candidate 
       # coordinates. 
-      if plan not in maze.address_tiles: 
-        maze.address_tiles["Johnson Park:park:park garden"] #ERRORRRRRRR
-      else: 
-        target_tiles = maze.address_tiles[plan]
+      # The authors looked up "Johnson Park:park:park garden" here for an
+      # unknown address but never used the result (target_tiles stayed None).
+      target_tiles = _known_tiles(maze, persona, plan)
 
     # There are sometimes more than one tile returned from this (e.g., a tabe
     # may stretch many coordinates). So, we sample a few here. And from that 
