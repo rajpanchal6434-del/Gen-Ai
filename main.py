@@ -357,7 +357,8 @@ def cmd_evaluate(args):
     try:
       summary, table = evaluation.evaluate(rs.personas, os.path.join(runs, sim),
                                            interview, out_dir,
-                                           do_network=not args.no_network)
+                                           do_network=not args.no_network,
+                                           recall_only=args.recall_only)
     except FatalLLMError as e:
       log(f"STOPPED: {e}. Rerun to continue; answers so far are cached.")
       sys.exit(2)
@@ -402,6 +403,8 @@ def main():
   common(e)
   e.add_argument("--start", action="store_true",
                  help="evaluate the step-0 snapshot (the paper's 'before' numbers)")
+  e.add_argument("--recall-only", action="store_true",
+                 help="only the recall test: no interviews, almost free")
   e.add_argument("--no-network", action="store_true",
                  help="skip the 600 'Do you know of X?' interviews")
 

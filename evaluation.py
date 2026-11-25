@@ -13,6 +13,10 @@ End-to-end evaluation, following the paper's Section 7 (emergent behaviour):
     Cafe on Feb 14 between 5 and 7 pm. Paper: 5 of 12 invited came.
   * Hallucination probe -- "Do you know Kane Martinez?" (a person who does not
     exist).
+  * Recall test (ours) -- for every agent whose memory really holds the party /
+    election, is a memory about it among the top 50 that retrieval returns for
+    the interview question? Measures the paper's "failed to retrieve relevant
+    memories" directly, without the noise of the AI's wording.
 
 Interviews use the authors' own interview pipeline (retrieve 50 memories ->
 summarise -> answer), the same one as `call -- analysis` in their code.
@@ -47,13 +51,16 @@ def judge(question, answer, criterion, speaker=None):
   return out.startswith("yes")
 
 
-def memory_text(persona):
+def memory_text(persona, include_seed=True):
   """Everything the agent can know: its seed description, its memory stream
   and the full text of its conversations. Memories added by memory fix D are
   left out: they are copies of conversation text, so with or without the fix
-  the agent "knows" exactly the same things and the comparison stays fair."""
+  the agent "knows" exactly the same things and the comparison stays fair.
+  The recall test leaves out the seed description: it is always in the
+  prompt, so finding it is not retrieval's job."""
   s = persona.scratch
-  seed = " ".join(str(x) for x in (s.learned, s.currently, s.innate) if x)
+  seed = (" ".join(str(x) for x in (s.learned, s.currently, s.innate) if x)
+          if include_seed else "")
   parts = []
   for n in persona.a_mem.id_to_node.values():
     if FACT_TAG in (n.keywords or ()):
@@ -137,9 +144,85 @@ def party_attendance(sim_folder):
   return sorted(seen)
 
 
-def evaluate(personas, sim_folder, interview, out_dir, do_network=True):
+RECALL_K = 50  # the interview pipeline reads the top 50 memories
+# The party and "5 pm" in the same sentence: most agents' daily plan says
+# "dinner at 5:00 pm", which says nothing about the party time.
+_SENT = r"[^.!?\n]*"
+_FIVE = r"\b5\s?(?::00\s?)?pm\b"
+_PARTY = r"(?:valentine|\bparty\b)"
+PARTY_AT_5 = re.compile(f"{_PARTY}{_SENT}{_FIVE}|{_FIVE}{_SENT}{_PARTY}", re.I)
+RECALL_TOPICS = [
+  # name, question, "really knows" check on memory_text, "this memory is about it"
+  ("party", PARTY_Q, lambda m: "party" in m and "valentine" in m,
+   re.compile(r"valentine|\bparty\b", re.I)),
+  ("election", ELECTION_Q, lambda m: "mayor" in m or "election" in m,
+   re.compile(r"mayor|election", re.I)),  # same test as "knows"
+  ("party_time", PARTY_TIME_Q,
+   lambda m: PARTY_AT_5.search(m) is not None, PARTY_AT_5),
+]
+
+
+def recall_test(personas, k=RECALL_K):
+  """For each agent who really knows a topic, does retrieval put a memory about
+  it in the top k for the interview question, and at what rank? No chat calls
+  (one embedding per question). Every memory's last-used time is put back
+  afterwards, so this does not change the interviews that follow."""
+  from persona.cognitive_modules.retrieve import new_retrieve
+  rows = []
+  for name, p in personas.items():
+    mem = memory_text(p, include_seed=False)
+    saved = {n.node_id: n.last_accessed for n in p.a_mem.id_to_node.values()}
+    try:
+      for topic, question, knows, about in RECALL_TOPICS:
+        if not knows(mem):
+          continue
+        got = new_retrieve(p, [question], k)[question]
+        rank = next((i + 1 for i, n in enumerate(got)
+                     if about.search(f"{n.embedding_key} {n.description}")), None)
+        rows.append({"agent": name, "topic": topic, "found": rank is not None,
+                     "rank": rank})
+    finally:
+      for n in p.a_mem.id_to_node.values():
+        n.last_accessed = saved[n.node_id]
+  return rows
+
+
+def recall_summary(rows):
+  out = {}
+  for topic, *_ in RECALL_TOPICS:
+    r = [x for x in rows if x["topic"] == topic]
+    ranks = [x["rank"] for x in r if x["found"]]
+    out[topic] = {"knowers": len(r), "found": len(ranks),
+                  "mean_rank": round(sum(ranks) / len(ranks), 1) if ranks else None}
+  return out
+
+
+def recall_lines(rs):
+  names = {"party": "Party memory in top 50 (of agents who know)",
+           "election": "Election memory in top 50 (of agents who know)",
+           "party_time": "Party-time (5 pm) memory in top 50 (of agents who know it)"}
+  lines = []
+  for topic, s in rs.items():
+    rank = f", mean rank {s['mean_rank']}" if s["mean_rank"] is not None else ""
+    lines.append(f"| {names[topic]} | - | {s['found']} of {s['knowers']}{rank} |")
+  return lines
+
+
+def evaluate(personas, sim_folder, interview, out_dir, do_network=True,
+             recall_only=False):
   os.makedirs(out_dir, exist_ok=True)
-  res = {"diffusion": info_diffusion(personas, interview),
+  recall = recall_test(personas)
+  rsum = recall_summary(recall)
+  if recall_only:
+    res = {"recall": recall, "summary": {"recall": rsum}}
+    with open(os.path.join(out_dir, "recall.json"), "w", encoding="utf-8") as f:
+      json.dump(res, f, indent=2, ensure_ascii=False)
+    lines = ["| Measure | Paper | Ours |", "| --- | --- | --- |"] + recall_lines(rsum)
+    with open(os.path.join(out_dir, "recall.md"), "w", encoding="utf-8") as f:
+      f.write("\n".join(lines) + "\n")
+    return res["summary"], "\n".join(lines)
+  res = {"recall": recall,
+         "diffusion": info_diffusion(personas, interview),
          "hallucination": hallucination(personas, interview),
          "attendance": party_attendance(sim_folder)}
   if do_network:
@@ -171,6 +254,7 @@ def evaluate(personas, sim_folder, interview, out_dir, do_network=True):
     "party_knew": len(knew), "party_attended_of_knew": len(came),
     "attended_any": len(res["attendance"]),
     "fake_person_claims": len(fake),
+    "recall": rsum,
   }
   if do_network:
     summary["density_either"] = res["network"]["density_either"]
@@ -193,6 +277,7 @@ def evaluate(personas, sim_folder, interview, out_dir, do_network=True):
            f"{summary['election_missed']} of {summary['election_in_memory']} |",
            f"| Right party time and place (of those who truly know) | - | "
            f"{summary['party_right_time']} of {summary['party_true']} |"]
+  lines += recall_lines(rsum)
   if do_network:
     lines.append(f"| Network density | 0.167 -> 0.74 | {summary['density_either']:.3f} "
                  f"(both-ways {summary['density_both']:.3f}) |")

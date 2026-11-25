@@ -41,6 +41,27 @@ def ChatGPT_request(prompt):
   return gateway().chat(prompt)
 
 
+def _json_part(text):
+  """The JSON object in a model answer. Current models often wrap it in a
+  ```json code fence; the authors cut only the text after the last '}', so a
+  fence in front broke json.loads on every try."""
+  text = (text or "").strip()
+  start, end = text.find("{"), text.rfind("}") + 1
+  return text[start:end] if start != -1 and end > start else text
+
+
+def _fail_safe(fail_safe_response):
+  """All tries failed. The authors pass a fail-safe answer for exactly this
+  case but returned False, which their callers turn into None and a crash
+  ('NoneType' object is not subscriptable). Use the fail-safe and log it."""
+  from llm_gateway import gateway
+  gw = gateway()
+  key = "fail_safe_used"
+  gw.stats[key] = gw.stats.get(key, 0) + 1
+  print(f"FAIL-SAFE used for {gw.current_template}: {fail_safe_response!r}")
+  return fail_safe_response
+
+
 def GPT4_safe_generate_response(prompt,
                                 example_output,
                                 special_instruction,
@@ -55,9 +76,7 @@ def GPT4_safe_generate_response(prompt,
   prompt += '{"output": "' + str(example_output) + '"}'
   for i in range(repeat):
     try:
-      curr_gpt_response = GPT4_request(prompt).strip()
-      end_index = curr_gpt_response.rfind('}') + 1
-      curr_gpt_response = curr_gpt_response[:end_index]
+      curr_gpt_response = _json_part(GPT4_request(prompt))
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
       # Current models often answer {"output": 6} instead of {"output": "6"};
       # the authors' validators expect text, so give them text.
@@ -67,7 +86,7 @@ def GPT4_safe_generate_response(prompt,
         return func_clean_up(curr_gpt_response, prompt=prompt)
     except Exception:
       pass
-  return False
+  return _fail_safe(fail_safe_response)
 
 
 def ChatGPT_safe_generate_response(prompt,
@@ -87,9 +106,7 @@ def ChatGPT_safe_generate_response(prompt,
     print(prompt)
   for i in range(repeat):
     try:
-      curr_gpt_response = ChatGPT_request(prompt).strip()
-      end_index = curr_gpt_response.rfind('}') + 1
-      curr_gpt_response = curr_gpt_response[:end_index]
+      curr_gpt_response = _json_part(ChatGPT_request(prompt))
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
       # Current models often answer {"output": 6} instead of {"output": "6"};
       # the authors' validators expect text, so give them text.
@@ -99,7 +116,7 @@ def ChatGPT_safe_generate_response(prompt,
         return func_clean_up(curr_gpt_response, prompt=prompt)
     except Exception:
       pass
-  return False
+  return _fail_safe(fail_safe_response)
 
 
 def ChatGPT_safe_generate_response_OLD(prompt,

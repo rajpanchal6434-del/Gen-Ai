@@ -18,6 +18,19 @@ Files under reverie/ are the authors' code. Changes made in this project:
       ("6") before the authors' validators see it: they expect text, and
       without this e.g. run_gpt_prompt_event_poignancy returned None and the
       run crashed while loading the starting memories.
+      The JSON object is cut out of the answer (models often wrap it in a
+      ```json code fence, which broke json.loads on every try). When all
+      tries fail, the authors' own fail-safe answer is returned and counted
+      (stats "fail_safe_used") instead of False, which callers turned into
+      None and a crash (seen at game hour 7:30 of a live run).
+  reverie/persona/cognitive_modules/execute.py
+                                An action address the map does not know (e.g.
+                                "the Ville:artist's co-living space:" with no
+                                arena) falls back to its closest known part
+                                instead of a KeyError crash (seen at 11:40 of
+                                a live run). The authors' unknown-address
+                                branch looked up Johnson Park but never used
+                                it; it now uses the same fallback.
   reverie/llm_gateway.py        New: cache, cost tracking, budget, mock mode.
   reverie/utils.py              New: paths (the authors' file is not published).
   reverie/reverie.py            Headless: no Selenium / Phaser frontend; the

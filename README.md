@@ -89,6 +89,9 @@ All are off by default, so a run without the switch is the authors' code.
 | D | A whole conversation is saved as one short summary; its details are never searched | Each fact in a conversation is saved as its own memory, linked to the conversation |
 
 ```powershell
+# Recall test: does retrieval bring up the memories that hold the answer? (only question embeddings, near $0)
+.venv\Scripts\python.exe main.py evaluate --sim before --recall-only
+.venv\Scripts\python.exe main.py evaluate --sim before --recall-only --memory-fix A,D,B
 # Test 1: same saved run, recalled with and without the fixes (cheap, no new simulation)
 .venv\Scripts\python.exe main.py evaluate --sim before                      # -> results\before
 .venv\Scripts\python.exe main.py evaluate --sim before --memory-fix A,B,C,D # -> results\before__fix-ABCD
@@ -101,6 +104,12 @@ On a run made without fix D, `evaluate --memory-fix ...D` first turns its saved
 conversations into fact memories (in memory only, nothing is written). The
 evaluation's "really knew" check reads the agent's full conversations and
 ignores fix-D memories, so it gives the same answer with and without the fixes.
+
+The recall test asks each agent who really knows a fact (the Valentine's
+party, the mayor election, the party time) a question about it, retrieves the
+top 50 memories as an agent would, and checks whether a memory holding the
+fact is among them and at which rank. Starting background text is left out,
+because retrieval cannot return it. Results go to `recall.json` / `recall.md`.
 
 ## Layout
 
